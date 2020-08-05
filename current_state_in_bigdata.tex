@@ -1,0 +1,10 @@
+\subsection{Current State of Statistics and Join Reordering Algorithm for Big Data}
+
+Currently, all these engines either use the Hive statistics or have statistics similar to it \cite{b1}:
+\begin{itemize}
+\item totalSize: Total size of the dataset as its seen at the filesystem level.
+\item numFiles: Number of files the dataset consists of.
+\item rawDataSize: Uncompressed size of the dataset.
+\item numRows: Number of rows in the dataset.
+\item columnStatistics: Statistics at column level: number of distinct values, max value, min value, number of null values, max length, average length.
+\end{itemize}
