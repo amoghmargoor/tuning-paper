@@ -1,6 +1,6 @@
 \subsection{Current State of Statistics and Join Reordering Algorithm for Big Data}
 
-Currently, all these engines either use the Hive statistics or have statistics similar to it \cite{b1}:
+Currently, all these engines either use the Hive statistics or have statistics similar to it:
 \begin{itemize}
 \item totalSize: Total size of the dataset as its seen at the filesystem level.
 \item numFiles: Number of files the dataset consists of.
@@ -8,3 +8,14 @@ Currently, all these engines either use the Hive statistics or have statistics s
 \item numRows: Number of rows in the dataset.
 \item columnStatistics: Statistics at column level: number of distinct values, max value, min value, number of null values, max length, average length.
 \end{itemize}
+
+All of these prominent SQL engines or Big Data have Join Reordering algorithms that would need statistics mentioned above. For instance, Apache Spark's Join Reordering is based upon Selinger et al \cite{b1}. It requires presence of column statistics to work. However, following are the issues with the Statistics in Big Data:
+
+\begin{itemize}
+\item Statistics are absent. Almost X \% of Tables in our user base do not have statistics.
+\item Statistics are expensive to compute, especially on cloud with per-usage billing. Just to compute column statistics using Apache Spark for 1 table of TPCDS-1000 scale \texttt{store\_sales}, it takes 40 mins job using 5 nodes of r4.2xlarge i.e., a 8 Core machine on AWS. Whereas, our customers process Data at Petabyte scale and would have thousands of such tables, so computing statistics on regular basis can be an expensive affair especially on cloud due to per-usage billing.
+\item Statistics need frequent maintenance. Due to velocity and volume of Data change in Big Data, statistics computed would go stale pretty frequently and would need frequent updating.
+\end{itemize}
+
+
+Hence, traditional approaches based on Statistics including the existing Join Algorithm would not work for Big Data workloads in most of the cases.
