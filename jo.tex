@@ -1,0 +1,36 @@
+\section{Join Reordering without statistics}
+In prevent section we looked into current state of affair for Join Reordering and why would it not work for Big Data systems. We will like to propose a novel approach in this section to reorder Join just on the basis of table sizes without any elaborate Table or Column Statistics as required by existing approaches.
+We have implemented this approach in Apache Spark and will show how our approach gives upto X improvement in TPCDS queries in our empirical evaluation.
+
+\subsection{Heuristics}
+
+Let us look at the assumptions and heuristics used for the approach.
+
+\subsubsection{Assumptions}:
+
+\begin{itemize}
+\item In Star Schema Join, the Dimension table’s primary key will be joined with the Fact table’s foreign key.
+\item Cardinality of Fact Table joined with Filtered Dimension table will be less than that of the Fact table.
+\item So based on last assumption, it follows that if Fact Join with Filtered Dimension happens earlier in multi-way join, it can benefit later joins.
+\end{itemize}
+
+To illustrate assumption above, let's look at this query:
+\texttt{select * from fact\_table f join dim1 d1 on f.k1 = d1.pk join dim2 d2 on f.k2 = d2.pk where d2.date = ‘06-10-2019’}. If there is a filter on \texttt{dim2} which is smaller than \texttt{dim1} assumption is it’s join with \texttt{fact\_table} would be smaller than \texttt{fact\_table}. Hence, joining \texttt{fact\_table} with \texttt{dim2} and then with \texttt{dim1} will be beneficial.
+
+\subsubsection{Heuristics for detecting Star schema}
+In the lack of statistics, we have to use only table sizes and query structure to determine if a Join is a fact table. We are using following heuristics to determine them:
+
+\begin{itemize}
+\item Table involved in all of the joins should be a fact table.
+\item At least half of the inner joins in the query should involve the fact table.
+\item The ratio of the size of the largest dimensions table to fact table size has to be lesser than a certain threshold.
+\item None of the dimensions tables is partitioned.
+\end{itemize}
+
+
+
+
+
+
+
+
