@@ -62,11 +62,7 @@ Second most common Join algorithm & BroadcastHashJoin - 44\%\\
 \input{current_state_in_bigdata}
 
 \section{Related Work}
-A lot of work has happened in the domain of the query planning of which the join ordering and join strategy are key components. It is agreed upon that the join reordering problem, in particular, is NP-Hard. There are quite a few approximation algorithms that try to solve this problem by leveraging the fact that not all join combinations are valid. System R [1] first suggested the use of Dynamic Programming (DP) for join ordering and is widely used by the join optimizers. DP based approach like System R[1] comes up with all possible valid join combinations and then chooses the plan with minimum cost. Guido & Thomas [4] propose a graph based dynamic programming strategy by avoiding the combinations which will not lead to valid join trees. The cost function for estimating the cost of running a given plan for both the approach relies heavily on column level statistics, cardinalities, and distinct values for defining the cost function.
-
-The DP based approaches are not scalable as they have exponential run time as well as space complexity. So these techniques are only feasible when the number of joins is small. Spark for example, only reorders joins involving less than 12 relations [6]. Large ad-hoc queries involving more than 10 relations are common in modern-day online analytical processing (OLTP) and object-oriented databases as the SQL queries are often nested. To tackle this problem,  the literature described in [5, 6, 7] proposes a heuristics-based approach for finding the optimal join order. These systems build the joins greedily either from a bottom-up or a top-down manner. This is different compared to the DP based approaches that rather than minimizing the cost of the entire plan they try to minimize the cost at each step. All though, this may not always produce the most optimal order, the primary goal here is to find a more optimal order compared to the current order.
-
-Both DP and Greedy approached rely on the column level statistic and getting column-level statistics like cardinalities and distinct values require a full table scan. This makes collecting and maintaining the stats very expensive. [Insert number of cases where stats are not available]. Even if the statistics are available, operators between the scan of the table and join can alter the data making the statistics inaccurate. Adaptive query execution removes the hard dependency of collecting the up-front statistics and the assumption of their accuracy by reordering the query plan on the fly rather than doing it at the start. In batched query systems like Spark, adaptive collects the statistics after executing all substage below the shuffle boundary. The newly generated statistics are then used for query replanning on the fly. This procedure is recursively applied at each shuffle boundary to leverage the newly updated statistics. Literature [8] reorders the nested loop joins after executing every batch of rows from the driver table based on the match rate of the joins. This approach however does not work for other join types because all the tables scans start in parallel. The  RIOS [9] takes a blocking approach where it starts by executing the pre-shuffle stages and then samples the data thus generated to get the information on cardinality and unique keys. Even though this approach is generic for all join types, the overhead of the sampling the data at shuffle stage and making blocking execution makes this approach infeasible in production environments. [Add numbers]
+\input{literature_survey}
 
 \input{jo}
 %\subsection{Maintaining the Integrity of the Specifications}
@@ -242,15 +238,7 @@ Both DP and Greedy approached rely on the column level statistic and getting col
 %``Temperature/K''.
 
 \section*{Experimental Evaluation}
-We evaluated the above mentioned greedy heuristics based approach in a Apache Spark. Spark's SQL optimizer allows passing the optimizer rules externally to the application. We implemented an optimizer which takes the optimized plan as input and based on the heuristics proposed, reorders the joins wherever applicable . It is assumed that the table sizes are available in the Spark optimized plan before applying this rule. We used the TPC DS dataset (scale 1000) non-partitioned dataset for evaluating the performance. The experiments was ran on a 5 node Apache Spark cluster on AWS with machine type r4.4xlarge.
-
-Out of 100 TPC-DS queries, we were able to reorder at least one join in the 41 queries. For the queries not reordered, the performance would be same as before. Figure 4 shows the runtime of few of the queries with and without the optimisation. We saw approximately 28\% improvement in the reordered queries and no performance degradation in any of the reordered query.
-
-\begin{figure}[ht]
-\centerline{\includegraphics[width=7cm]{fig/chart.png}}
-\caption{Performance reordered sample queries}
-\label{performance_number}
-\end{figure}
+\input{experimental_evaluation}
 
 \section*{Acknowledgment}
 
@@ -290,7 +278,7 @@ combinatorial techniques.`` SIGMOD Record, vol. 18, no. 2, 1989.
 \bibitem{b6} L. Fegaras ``A new heuristic for optimizing large queries in DEXA ’98``. Proceedings of the 9th International Conference on Database and Expert Systems Applications, 1998.
 \bibitem{b7} N. Bruno, C. Galindo-Legaria and M. Joshi ``Polynomial Heuristics for Query Optimization``. 2010 IEEE 26th International Conference on Data Engineering (ICDE 2010), Long Beach, CA, 2010, pp. 589-600, doi: 10.1109/ICDE.2010.5447916.
 \bibitem{b8} Li, Quanzhong & Shao, Minglong & Markl, Volker & Beyer, Kevin & Colby, Latha & Lohman, Guy. (2007)  ``Polynomial heuristics for query optimization,`` Proceedings - International Conference on Data Engineering. 26-35. 10.1109/ICDE.2007.367848.
-\bibitem{b8} Li, Youfu & Li, Mingda & Ding, Ling & Interlandi, Matteo. (2018)  `` RIOS: Runtime Integrated Optimizer for Spark`` 275-287. 10.1145/3267809.3267814.
+\bibitem{b9} Li, Youfu & Li, Mingda & Ding, Ling & Interlandi, Matteo. (2018)  `` RIOS: Runtime Integrated Optimizer for Spark`` 275-287. 10.1145/3267809.3267814.
 
 %\bibitem{b2} J. Clerk Maxwell, A Treatise on Electricity and Magnetism, 3rd ed., vol. 2. Oxford: Clarendon, 1892, pp.68--73.
 %\bibitem{b3} I. S. Jacobs and C. P. Bean, ``Fine particles, thin films and exchange anisotropy,'' in Magnetism, vol. III, G. T. Rado and H. Suhl, Eds. New York: Academic, 1963, pp. 271--350.
