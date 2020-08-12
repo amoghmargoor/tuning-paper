@@ -6,7 +6,7 @@ We have implemented this approach in Apache Spark and will show how our approach
 
 Let us look at the assumptions and heuristics used for the approach.
 
-\subsubsection{Assumptions}:
+\subsubsection{Assumptions}\label{subsubsec:assumption}:
 
 \begin{itemize}
 \item In Star Schema Join, the Dimension table’s primary key will be joined with the Fact table’s foreign key.
@@ -27,10 +27,63 @@ In the lack of statistics, we have to use only table sizes and query structure t
 \item None of the dimensions tables is partitioned.
 \end{itemize}
 
+\subsubsection{Constraints for the Join Reorder algorithm}
+We will define all the constraints or boundary conditions for the applicability of the algorithm here:
+
+\begin{itemize}
+\item \textbf{Star Schema Constraint}: Only Star schema Joins will be considered as assumptions made above are for Star Schema Join only.
+\item \textbf{Simple Join Constraint}: Only INNER Joins whose left and right side are comprised of these operators that are deterministic and which do not increase the output size over the input size, other than Join.
+\item \textbf{Shuffle Constraint}: For systems having shuffle like Spark or Hive, we reorder only if number of shuffles do not increase due to it. For e.g., consider the following query: \texttt{select * from store\_sales s, item i, web\_sales ws, customer c where s.ss\_item\_sk = i.i\_item\_sk and i.i\_item\_sk = ws.i\_item\_sk and c.c\_customer\_sk = s.ss\_customer\_sk}
+\item \textbf{Size Constraint}: Fact table should be atleast $X$ times larger than dimension tables. $X$ is configurable.
+\end{itemize}
+
+\subsection{Algorithm}
+
+\begin{algorithm}
+\begin{algorithmic}[1]
+\STATE  $\Omega$ $\gets$ $R_1$ $\Join$ $R_2$
+\IF{$isStarSchemaJoin$($\Omega$) and $isSimpleJoin$($\Omega$) and $obeysShuffleConstraint$($\Omega$)}
+    \STATE $type$ $\gets$ $treeType$($\Omega$) \COMMENT{$type$ will be either $left-deep$ or $right-deep$}
+    \STATE ($\sigma$, $\delta$[$1$, $\ldots$, $n$]) $\gets$ $extractFactDimensions$($\Omega$)
+    \STATE $\theta$[1, $\ldots$, k] $\gets$ $getFilteredDimensions$($\delta$[$1$, $\ldots$, $n$])
+    \STATE $\pi$[1, $\ldots$, l] $\gets$ ($\delta$[$1$, $\ldots$, $n$] - $\theta$[1, $\ldots$, k]
+    \STATE $\theta$[k+1] $\gets$ $dummyTable1$
+    \STATE $dummyDim1$.$size$ $\gets$ $\infty$ 
+    \STATE $\pi$[l+1] $\gets$ $dummyTable2$
+    \STATE $dummyTable2$.$size$ $\gets$ $-\infty$
+    \STATE $i$ $\gets$ 0
+    \STATE $j$ $\gets$ 0
+    \FOR{$r$ $\gets$ $1$ to $n$} 
+        \IF{$\theta$[$i$].size $\geq$ $\pi$[$j$].size}
+            \STATE $i$ $\gets$ $i$ $+$ $1$
+            \STATE $result$[$r$] $\gets$ $\theta$[$i$]
+        \ELSE
+            \STATE $j$ $\gets$ $j$ $+$ $1$
+            \STATE $result$[$r$] $\gets$ $\pi$[$j$]         
+        \ENDIF
+    \ENDFOR
+    \STATE $\Omega$ $\gets$ $buildJoinTree$($type$, $\sigma$, $result$[$1$, $\ldots$, $n$])
+\ENDIF
+\RETURN $\Omega$ 
+\end{algorithmic}
+\label{algorithm}
+\caption{Algorithm to Reorder Joins}
+\end{algorithm}
 
 
+Algorithm is presented in \ref{algorithm} where $\Omega$ is assigned to the input Join that needs to be reordered. Following are the summary of steps to reorder them:
+\begin{itemize}
+\item Check if all constraints are satisfied for a join: \textbf{Star Schema Constraint}, \textbf{Simple Join Constraint}, \textbf{Shuffle Constraint}, \textbf{Size Constraint}.
+\item Once it is a star schema, the Join tree can either be \textit{left-deep} or \textit{right-deep}. Obtain the information as we would like to construct reordered join the same way.
+\item Extract the Fact table: $\sigma$ and Dimension tables: $ (\delta_1, \delta_2, \ldots, \delta_n)$. For dimension table $\delta_i$, represents  $i^{th}$ dimension table being joined with fact table $\sigma$ from bottom of the Join Tree as shown in Figure \ref{left-deep}. As the tree here would be either \textit{left-deep} or \textit{right-deep} every dimension will have unique $i$ assigned to them. 
+\item Split dimensions into two lists: one with selective predicates. $\theta$ and another without it, $\pi$.
+\item Sort the list with selective predicates i.e., $\theta$ based on sizes of the dimension tables. Sort the other list i.e., $\pi$ using user provided order.
+\item Merge both the list of dimensions by giving user order the preference for tables without selective predicate, whereas for tables with selective predicates giving preference to smaller tables. When comparing top of both the lists, if size of the top table in selective predicate list is smaller than top of other list, choose it otherwise vice-versa. This is in congruence with the Assumption made earlier in sub section \ref{subsubsec:assumption}.
+\end{itemize}
 
-
-
-
+\begin{figure}[ht]
+\centerline{\includegraphics[width=5cm]{fig/left-deep.png}}
+\caption{Left-Deep Tree with Fact table $\sigma$ and dimension tables $\delta_i$}
+\label{left-deep}
+\end{figure}
 
