@@ -1,4 +1,13 @@
-\subsection{Current State of Statistics and Join Reordering Algorithm for Big Data}
+\subsection{Why will Traditional Approaches for Join Reordering not work in Big Data systems ?}
+These two traditional approaches can be used for finding optimal Join order:
+\begin{itemize}
+\item Cost-Based Optimization
+\item Adaptive Execution
+\end{itemize}
+
+We will look into current state of each one of the approaches in Big Data SQL engines and why is it not applicable in most cases.
+
+\subsubsection{Current State of Statistics and Join Reordering Algorithm for Big Data}
 
 Currently, all these engines either use the Hive statistics or have statistics similar to it:
 \begin{itemize}
@@ -17,5 +26,6 @@ All of these prominent SQL engines or Big Data have Join Reordering algorithms t
 \item Statistics need frequent maintenance. Due to velocity and volume of Data change in Big Data, statistics computed would go stale pretty frequently and would need frequent updating.
 \end{itemize}
 
+Hence, traditional Cost Based Optimization techniques based would not work for Big Data workloads in most of the cases.
 
-Hence, traditional approaches based on Statistics including the existing Join Algorithm would not work for Big Data workloads in most of the cases.
+\input{dp_cons}
