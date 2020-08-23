@@ -16,7 +16,7 @@ Figure \ref{distributed_hash_join} illustrates this join.
 When joining two tables \texttt{store\_sales} and \texttt{item} Presto regards table on the right i.e., \texttt{item}  as build side and table on left i.e., \texttt{store\_sales} as probe side.
 Build side is used to build distributed hash table. As shown in the figure, after table \texttt{item} is scanned, its rows are hash distributed to different nodes based on join key \texttt{i\_item\_sk}. Once distributed, rows from table B are used to create Hash Table. Rows from the Probe Side are also distributed to different nodes using the same hash on the join key \texttt{i\_item\_sk}. Due to this partitioning \texttt{ss\_item\_sk}  and \texttt{i\_item\_sk} with same values end up in the same node.  Rows of Probe Side once distributed are checked against Hash table to find matching join rows. Here, major cost of the join will be building Hash tables on the Build Side. Hence, join reordering can considerably improve the performance by choosing smaller table as build side whenever possible (like in the cases of INNER Joins).
 
-\subsubsection{Sort Merge Join in Spark}
+\subsubsection{Sort Merge Join in Spark}\label{subsubsec:sparkjoin}
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=9.5cm]{fig/SortMergeJoin.png}}

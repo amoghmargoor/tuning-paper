@@ -13,7 +13,7 @@
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{Improving Join Reordering for SQL on Big Data Systems without Statistics\\
+\title{Improving Join Reordering for Large Scale Distributed Computing\\
 }
 
 \author{\IEEEauthorblockN{Amogh Margoor}
@@ -28,9 +28,9 @@ Bangalore, India}
 \maketitle
 
 \begin{abstract}
-Using Qubole Data Service, customers process around 4 million SQL Joins per month on their Big Data using Apache Spark. Order in which SQL Joins are performed can vary the efficiency and performance of analytical queries significantly. Hence, finding optimal order for SQL Join is a well researched NP-Hard problem. However, like other traditional Cost Based Optimization in Query processing, even traditional Join Reordering algorithms are not effective on Big Data due to lack of statistics. Statistics are mostly absent in Big Data as they are expensive to compute and needs frequent recompute due to velocity of data change. Hence, ensuring optimal order of Joins is still largely a manual process done via trial and error method on Big Data Systems.
+ SQL Joins are one of the most commonly used operators for workloads running upon Big Data SQL Systems like Apache Spark SQL, Apache Hive and Presto. As Joins on Big Data can be expensive, Join optimizations can significantly improve the efficiency and performance of analytical workloads. In this work, we would address the problem of finding optimal order for SQL Joins, which is a well researched NP-Hard problem for traditional workloads but not for Big Data workloads. Traditional Cost Based Optimization in Query processing, including Join Reordering algorithms are not effective on Big Data due to lack of statistics. Statistics are mostly absent in Big Data as they are expensive to compute and needs frequent recompute due to velocity of data change. Hence, ensuring optimal order of Joins is still largely a manual process done via trial and error method on Big Data Systems.
 
-We would like to propose a novel greedy algorithm for Join Reordering which can work in the absence of statistics. Proposed technique is of linear complexity in terms of number of joins. We have observed it improving query performance upto 85\% on TPC-DS benchmarks.
+We would like to propose a novel greedy algorithm for Join Reordering which can work in the absence of statistics. Proposed technique is of linear complexity in terms of number of joins. We have observed that on TPC-DS benchmarks it can reorder 41 queries and improve query performance upto 85\%.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -38,9 +38,34 @@ SQL on Big Data, Query Processing, Join Order, Data Management Systems
 \end{IEEEkeywords}
 
 \section{Introduction}
-Joins are extremely common for analytical workloads on Big Data and optimizing joins can improve the efficiency and performance of such workloads significantly. Qubole Data Service offers 3 prominent SQL engines for Big Data as a service on public clouds like Amazon AWS, Microsoft Azure and Google Cloud Platform: Apache Hive, Presto and Apache Spark. Customers using Qubole Data Service processes 4 million joins per month using just Apache Spark, making it one of the most commonly used SQL operators. Table \ref{tab:stats} specifies some of the Join metrics we collected for a month on Qubole's offering of Apache Spark. We see around 51\% of joins being INNER JOIN and around 55\% of all Joins using Merge Sort Join algorithm. Due to the frequency and the complexity of Joins, Join Order and Join Strategy are two important decision to be made by Optimizers of Big Data Engines. Optimizers of these Big Data engines like Apache Spark uses traditional Dynamic Programming based algorithms \cite{b1} dependent on column level Statistics. Although Join Reordering is extensively researched problem, the techniques are largely dependent on availability of statistics. For instance, Join reordering algorithm in Spark and Presto will not work without column level statistics. Such extensive statistics are absent for Big Data workloads as they are expensive to compute and maintain. So the Join Reordering rules are never kicked in, leaving it up to the users to take care of it. Since this critical operation is still manual and requires trial and error method, we would like to propose technique which can work on just the table sizes which can be computed during planning stage even if absent in a cheap manner.
+Massive analytics on Big Data using Large Scale Data processing are increasingly being used for business decisions. SQL Engines like Apache Spark~\cite{b9}, Apache Hive~\cite{b10} and Presto have been built for Big Data to address these needs. Such Engines have adapted many traditional DBMS relational techniques in this paradigm, making SQL operators like Join quite popular and common for Big Data Processing. For instance, on Qubole Data Service we see around 4 million joins getting processed every month through Apache Spark. Hence, optimizing Joins can improve the efficiency and performance of such workloads significantly. In Join optimization, finding optimal order of Joins can be extremely beneficial and hence, a well studied NP-Hard problem in traditional DBMS world.
 
-In following subsection we would cover in details the importance of Join Reordering for widely used Join algorithms in Presto and Apache Spark. We will then present the current state of Reordering algorithm and Statistics in the prominent Big Data engines and uncover the reasons to consider new algorithm.
+Like in traditional systems, SQL Engines on Big Data also have Cost-Based Optimizer that can find the optimal join order using Dynamic Programming based algorithms \cite{b1}. However, availability of the extensive statistics like column statistics~\cite{b11} are pre-requisite for these traditional approaches. For instance, Apache Spark or Presto's Join Ordering will not work without the column statistics. In general, such statistics are absent for Big Data workload rendering these techniques not useful. The volume of Big Data runs in TBs and PBs nowadays, associated with high velocity of change. Under such circumstances, computing statistics and maintaining it for new data changes can be expensive for Users.
+
+An alternative to Cost Based approach to figure out optimal Join Order would be Adaptive query processing~\cite{b12}. Adaptive query processing can use runtime feedback to change the query plan being executed for better performance or some such goal. So even if Statistics are not available, if such framework can provide it during runtime, it can be used to find optimal Join Order.
+Firstly, such sophisticated framework is not part of many existing SQL engines on Big Data. Only Apache Spark has introduced support for it.  Secondly,  
+even on Apache Spark modifying Adaptive query processing  donot provide column level stats at runtime from it's Query Stage which can be used to perform Join Reordering. Ensuring such elaborate statistics during runtime and waiting for all the Table Scan to finish with such statistics before starting any join can be detrimental to the performance of the query.
+
+We analyzed the customer workloads at Qubole and couple of patterns emerged:
+\begin{enumerate}
+\item Statistics: Statistics were absent for almost all of the workloads. But on the fly during planning stage, Apache Spark and Apache Hive both compute the table sizes using the listing operations. This is done to ensure when joining with small tables, Broadcast Joins on Spark or Map-Side Joins on Hive can be performed which would make Joins faster. This is an important optimization which we briefly describe in Section ~\ref{subsubsec:sparkjoin}. These table sizes computation on the fly are the reason why among 4 million joins processed per month by Apache Spark on Qubole Data Service, 44 \% of them are Broadcast Joins as shown in Table ~\ref{tab:stats}.
+\item Fact-Dimension Join: Another important pattern that emerged was that most of the queries with joins either on Snowflake schema or Star Schema will have Fact to Dimension table joins. Lot of queries with multi-table joins have 1 or multiple Fact tables involved in Join with other smaller dimension tables. That is the reason we see lot of Broadcast Joins (almost 44 \% of Joins according to Table ~\ref{tab:stats}) in Big Data workloads i.e., lot of small tables being used on one side of the Join.
+\end{enumerate}
+
+Based on the patterns above, in this paper we will present our technique for Join ordering using Table Sizes computed on-fly. Using the above patterns we devised a greedy technique for Join Reordering. At high level it performs two main steps:
+1. Identify Dominant Fact table in a query i.e., Fact table involved in more than half number of Joins in the query. 
+2. Perform Reordering of the Filtered Dimension tables involved in join with the Dominant Table.
+
+Apart from the fact that this technique can work in absence of Statistics, it is also executes in linear time i.e., linear to the number of Joins in the Query. It is simple enough to be implemented as an Optimizer rule for the popular SQL engines on Big Data.  
+
+We have implemented this technique in Qubole's distribution of Apache Spark as a Catalyst Rule. We have found it to be effective both on Customer workloads and TPC-DS benchmarks inspite of being simple to implement and reason about. When evaluated on TPC-DS benchmark at 100 scale, we saw 38 queries being Join reordered among 100 queries. Out of all reordered queries, 71.1\% reordered queries showed up to 30\% improvement, 15.8\% queries showed between 30 to 60\% improvement and 13.2\% queries showed greater than 60\% improvement.
+
+In the following Section ~\ref{sec:background} we will give a background on Joins, Statistics and Adaptive Execution in Big Data. Then we will propose our technique and algorithm in Section~\ref{sec:jo}. We will also present experimental evaluation of the algorithm in Section~\ref{sec:exp-evaluation}. In the following Section ~\ref{sec:rel_work}, we will discuss the existing work done in academia for Join Reordering and their relevance to our problem statement.
+
+\section{Background}\label{sec:background}
+
+Customers using Qubole Data Service processes 4 million joins per month using just Apache Spark, making it one of the most commonly used SQL operators. Table \ref{tab:stats} specifies some of the Join metrics we collected for a month on Qubole's offering of Apache Spark. We see around 51\% of joins being INNER JOIN and around 55\% of all Joins using Merge Sort Join algorithm. Due to the frequency and the complexity of Joins, Join Order and Join Strategy are two important decision to be made by Optimizers of SQL Big Data Engines. Optimizers of these Big Data engines like Apache Spark uses traditional Dynamic Programming based algorithms \cite{b1} dependent on column level statistics. Such extensive statistics are absent for Big Data workloads as they are expensive to compute and maintain. Due to unavailability of statistics, traditional approaches for Join reordering will not work. Hence, critical operation of ensuring optimal order of Joins are left to analyst and still is largely a manual effort which is error prone. We would like to propose technique which can work on just the table sizes which can be computed during planning stage even if absent in a cheap manner.
+
 
 \begin{table}[h]
 \begin{center}
@@ -62,12 +87,10 @@ Second most common Join algorithm & BroadcastHashJoin - 44\%\\
 \input{current_state_in_bigdata}
 
 In above, subsection we clearly saw why traditional approaches like Cost Based Optimizations and Adaptive Execution not work well for finding optimal Join Order in Big Data. Hence, in this paper we will present a novel greedy approach for Join Reordering which can work without expensive statistics for Big Data Systems.
-In the following Section ~\ref{sec:rel_work}, we will discuss the existing work done in academia for Join Reordering and their relevance to our problem statement. Then we will propose our technique and algorithm in Section~\ref{sec:jo}. We will also present experimental evaluation of the algorithm in Section~\ref{sec:exp-evaluation}.
 
-\input{literature_survey}
 \input{jo}
 \input{experimental_evaluation}
-
+\input{literature_survey}
 \section*{Acknowledgment}
 
 \begin{thebibliography}{00}
@@ -81,6 +104,10 @@ combinatorial techniques.`` SIGMOD Record, vol. 18, no. 2, 1989.
 \bibitem{b6} N. Bruno, C. Galindo-Legaria and M. Joshi ``Polynomial Heuristics for Query Optimization``. 2010 IEEE 26th International Conference on Data Engineering (ICDE 2010), Long Beach, CA, 2010, pp. 589-600, doi: 10.1109/ICDE.2010.5447916.
 \bibitem{b7} Li, Quanzhong and Shao, Minglong and Markl, Volker and Beyer, Kevin and Colby, Latha and Lohman, Guy. (2007)  ``Polynomial heuristics for query optimization,`` Proceedings - International Conference on Data Engineering. 26-35. 10.1109/ICDE.2007.367848.
 \bibitem{b8} Li, Youfu and Li, Mingda and Ding, Ling and Interlandi, Matteo. (2018)  `` RIOS: Runtime Integrated Optimizer for Spark`` 275-287. 10.1145/3267809.3267814.
+\bibitem{b9} M. Zaharia, M. Chowdhury, M.J. Franklin, S. Shenker, I. Stoica
+``Spark: Cluster computing with working sets`` Proceedings of the 2Nd USENIX Conference on Hot Topics in Cloud Computing, HotCloud’10, USENIX Association, Berkeley, CA, USA (2010), p. 10 http://dl.acm.org/citation.cfm?id=1863103.1863113
+\bibitem{b10} Apache Hive. http://hadoop.apache.org/hive.
+\bibitem{b11} The Internals of Spark SQL. https://jaceklaskowski.gitbooks.io/mastering-spark-sql/content/spark-sql-ColumnStat.html
+\bibitem{b12} Avnur R. and Hellerstein J.M. Eddies: continuously adaptive query processing. In Proc. ACM SIGMOD Int. Conf. on Management of Data, pp. 261–272.2000
 \end{thebibliography}
-
 \end{document}
