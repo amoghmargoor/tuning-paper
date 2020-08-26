@@ -1,7 +1,7 @@
 \section{Experimental evaluation}\label{sec:exp-evaluation}
 We evaluated the above mentioned greedy heuristics-based approach in Apache Spark. Spark's SQL optimizer allows passing the optimizer rules externally to the application. We implemented an optimizer that takes the optimized plan as input and based on the heuristics proposed, reorders the joins wherever applicable. It is assumed that the table sizes are available in the Spark optimized plan before applying this rule. We used the TPC DS~\cite{b14}  dataset (scale 100) non-partitioned dataset for evaluating the performance. The experiments were run on a 5 node Apache Spark cluster on AWS with machine type r4.4xlarge.
 
-Out of 100 TPC-DS~\cite{b14}  queries, at least one join in the 38 queries was reordered. We saw on average  For the queries not reordered, the performance would be the same as before. We saw an average 5\% improvement in perfoormance for the reordered queries. Figure \ref{performance_number} compares the runtimes of the reordered queries with the same query executed with the user order.
+Out of 100 TPC-DS~\cite{b14}  queries, at least one join in the 38 queries was reordered. We saw on average  For the queries not reordered, the performance would be the same as before. Figure \ref{performance_number} compares shows the improvement in percentages for the queries observed. Queries where difference were very low have been removed.
 
 \begin{figure}[ht]
     \centerline{\includegraphics[width=7cm]{fig/chart.png}}
@@ -9,7 +9,8 @@ Out of 100 TPC-DS~\cite{b14}  queries, at least one join in the 38 queries was r
     \label{performance_number}
 \end{figure}
 
-Out of all reordered queries, 5.1\% queries showed more than 20\% improvement, 15.4\% queries showed between 10 to 20\% improvement, 51.3\% queries showed between 10 to 20\% improvements and degraded 28.2\% queries showed the degradation of less than 10\%.
+Out of all reordered queries, 5.1\% queries showed more than 20\% improvement, 15.4\% queries showed between 10 to 20\% improvement, 51.3\% queries showed between 0 to 10\% improvements and degraded 7.7\% queries showed the degradation of less than 5-10\%.
+There were around 20\% we saw degradation of less than 5\% which on cloud environment can happen due to multiple reasons like noisy neighbor problem, object store latency fluctuations etc so can be ignored.
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=7cm]{fig/pie.png}}

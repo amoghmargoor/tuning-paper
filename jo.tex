@@ -1,6 +1,5 @@
-\section{Join Reordering without statistics}\label{sec:jo}
-In the previous section we looked into the current state of affair for Join Reordering and how it does not work for Big Data systems because of lack of statistics. We are proposing a novel approach in this section to reorder multi-way Joins just based on the table sizes without any elaborate Table or Column Statistics as required by existing approaches.
-We have implemented this approach in Apache Spark and will show how our approach gives upto 51\% improvement on TPC-DS benchmark.
+\section{Join Reordering with Table sizes}\label{sec:jo}
+As mentioned in previous section, only table sizes are available as they are computed on-the-fly during planning stage in SQL Engines for Big Data. In this section, we will propose a novel approach to reorder multi-way Joins just based on the table sizes without any elaborate Table or Column Statistics as required by traditional approaches. We have implemented this approach in Apache Spark and will show how our approach gives upto 51\% improvement on TPC-DS benchmark.
 
 \subsection{Heuristics}
 
@@ -14,7 +13,7 @@ Let us look at the assumptions and heuristics used for the approach.
 \item So based on the last assumption, it follows that if Fact Join with Filtered Dimension happens earlier in multi-way join, it can benefit later joins.
 \end{itemize}
 
-To illustrate assumptions above, let's look at an example. In a query given below, based on the user order,  \texttt{fact\_table} joins with the \texttt{dim1} first. The result of this join is then joined with \texttt{dim2}. In the query there is a selective filter on \texttt{dim2} table scan, \texttt{dim2.DATE = ‘06-10-2019’}. Also if the \texttt{dim2} has a smaller size compared to \texttt{dim1}, assumption is, size of the result post it's join with \texttt{fact\_table} will be smaller than the size of result post the join between \texttt{fact\_table} and \texttt{dim1}. Hence, joining \texttt{fact\_table} with filtered dimensions table, \texttt{dim2} and then with \texttt{dim1} will be beneficial.
+To illustrate assumptions above, let's look at an example. In a query given below, based on the user order,  \texttt{fact\_table} joins with the \texttt{dim1} first and then it's result is joined with \texttt{dim2}. However, based on the assumption above if join with filtered dimension i.e., \texttt{dim2} is done first then it would be beneficial to the later joins.
 
 \begin{verbatim}
 SELECT * 
@@ -26,13 +25,13 @@ FROM   fact_table f
 WHERE  d2.DATE = ‘06-10-2019’ 
 \end{verbatim}
 
-As the approach is based upon finding the Fact-Dimension multi-way joins and within those, finding the dominant Fact table, we will look at the heuristics used for that in the following subsection.
+As the approach is based upon finding the Fact-Dimension multi-way joins and within those, finding the dominant fact table, we will look at the heuristics used for that in the following subsection.
 
 \subsubsection{Heuristics for detecting Dominant Fact table}
-In the lack of relations information and statistics, we have to use only table sizes and query structure to determine Fact table in a Join. We are using the following heuristics to determine them:
+In the absence of statistics, we have to use only table sizes and query structure to determine Fact table in a Join. We are using the following heuristics to determine them:
 
 \begin{itemize}
-\item At least half of joins in the query should be inner join involving only one table. That would be the Fact table. Other tables being joined with Fact table would be considered Dimension table.
+\item At least half of joins in the query should be inner join involving one common table. That would be the Fact table. Other tables being joined with Fact table would be considered Dimension table.
 \item The ratio of the size of the largest Dimensions table to Fact table size should be lesser than a certain threshold. We have used 0.3 as the threshold but it is configurable.
 \item None of the Dimensions tables should be partitioned.
 \end{itemize}
@@ -41,9 +40,9 @@ In the lack of relations information and statistics, we have to use only table s
 We will define all the constraints or boundary conditions for the applicability of the algorithm here:
 
 \begin{itemize}
-\item \textbf{Fact Table Constraint}: Only if Dominant Fact table can be determined from multi-way join then we can apply the approach.
+\item \textbf{Fact Table Constraint}: Only if dominant fact table can be determined from multi-way join then we can apply the approach.
 \item \textbf{Simple Join Constraint}: Only INNER Joins are considered which can be composed of other Joins too. But apart from the Joins, none of the operator in both the left and right side of the join should be non-deterministic, or have output greater than the input to the operator. For instance, Filter would be allowed operator as it reduces the output over input, but a project adding extra column will not be allowed. It is difficult to reason about operators that add extra to output when dealing with just table sizes, so instead we only allowed operators from selected set of operators.
-\item \textbf{Shuffle Constraint}: For systems having shuffle like Spark or Hive, we reorder only if the number of shuffles do not increase due to it. For e.g., consider the following query where we should not change the join order: 
+\item \textbf{Shuffle Constraint}: For systems having shuffle like Apache Spark or Hive, we reorder only if the number of shuffles do not increase due to it. For e.g., consider the following query where we should not change the join order: 
 \begin{verbatim}
 SELECT * 
 FROM   store_sales s, 
@@ -56,10 +55,9 @@ WHERE  s.ss_item_sk = i.i_item_sk
                        c.c_customer_sk
 \end{verbatim}
 
-Based on user order, table \texttt{store\_sales} would be joined with \texttt{item} table first and then with \texttt{web\_sales} and \texttt{customer} tables recursively. The join predicate from the \texttt{store\_sales} table, \texttt{store\_sales.ss\_item\_sk} is same for the first two joins, So if all the joins are of type SortMergeJoin, data from the scan of \texttt{store\_sales} table will be shuffled only once during the execution for join with \texttt{item} table and would be reused while executing the join \texttt{web\_sales} table. Changing the consecutive join order of \texttt{item} and \texttt{web\_sales} tables by introducing the join with \texttt{customer} table in between them, we will have to shuffle the data from \texttt{store\_sales} initially with \texttt{store\_sales.ss\_item\_sk}, then with \texttt{store\_sales.ss\_customer\_sk} and again with   \texttt{store\_sales.ss\_item\_sk}. This would lead to an addition of an extra shuffle in the execution.
+Based on user order, table \texttt{store\_sales} would be joined with \texttt{item} table first and then with \texttt{web\_sales} and \texttt{customer} tables respectively. The join predicate from the \texttt{store\_sales} table, \texttt{store\_sales.ss\_item\_sk} is same for the first two joins, So if all the joins are of type SortMergeJoin, data from the scan of \texttt{store\_sales} table will be shuffled only once during the execution for join with \texttt{item} table and would be reused while executing the join with \texttt{web\_sales} table. Changing the consecutive join order of \texttt{item} and \texttt{web\_sales} tables by introducing the join with \texttt{customer} table in between them, we will have to shuffle the data from \texttt{store\_sales} initially with \texttt{store\_sales.ss\_item\_sk}, then with \texttt{store\_sales.ss\_customer\_sk} and again with   \texttt{store\_sales.ss\_item\_sk}. This would lead to an addition of an extra shuffle in the execution.
 \item \textbf{Size Constraint}: Fact table should be at least $X$ times larger than dimension tables. $X$ is configurable. For our implementation Dimension size to Fact size  ratio should be lower than 0.3.
 \end{itemize}
-
 
 Based on above constraint let's look at the core algorithm for finding the optimal Join order. It uses following utility functions based on constraint and heuristics defined above:
 
@@ -107,13 +105,13 @@ In the algorithm presented above, $\Omega$ is assigned to the input Join that ne
 \begin{itemize}
 \item Check if all constraints are satisfied for a join: \textbf{Fact Table Constraint}, \textbf{Simple Join Constraint}, \textbf{Shuffle Constraint}, \textbf{Size Constraint}.
 \item Once we find Fact table, Join tree associated with it can either be \textit{left-deep} or \textit{right-deep}. Obtain the information as we would like to construct reordered join the same way.
-\item Extract the Fact table: $\sigma$ and Dimension tables: $ (\delta_1, \delta_2, \ldots, \delta_n)$. For dimension table, $\delta_i$ represents  $i^{th}$ dimension table being joined with the fact table $\sigma$ from the bottom of the Join Tree as shown in Figure \ref{left-deep}. As the tree here would be either \textit{left-deep} or \textit{right-deep} every dimension will have unique $i$ assigned to them.
-\item Split dimensions into two lists: one with selective predicates. $\theta$ and another without it, $\pi$.
+\item Extract the Fact table:$\sigma$ and Dimension tables:$ (\delta_1, \delta_2, \ldots, \delta_n)$. For dimension table, $\delta_i$ represents  $i^{th}$ dimension table being joined with the fact table $\sigma$ from the bottom of the Join Tree as shown in Figure \ref{left-deep}. As the join tree, here would always be either \textit{left-deep} or \textit{right-deep} every dimension will have unique $i$ assigned to them.
+\item Split dimensions into two lists: one with selective predicates i.e., $\theta$ and another without it i.e., $\pi$.
 \item Sort the list with selective predicates i.e., $\theta$ based on sizes of the dimension tables. Sort the other list i.e., $\pi$ using user-provided order.
 \item Merge both the list of dimensions by giving user order the preference for tables without a selective predicate, whereas for tables with selective predicates giving preference to smaller tables. When comparing the top of both the lists, if size of the top table in the selective predicate list is smaller than top of the other list, choose it otherwise vice-versa. This is in congruence with the Assumption made earlier in subsection \ref{subsubsec:assumption}.
 \end{itemize}
 
-This is a greedy approach where smaller joins with filtered Dimension table are preferred for execution earlier than other Joins to improve Join performance.
+The above algorithm is a greedy approach where smaller joins with filtered dimension table are preferred for execution earlier than other Joins to improve Join performance. As observed, we try to keep the user order intact when unsure about reordering to make sure regressions are minimized. When evaluating on TPC-DS benchmarks, out of 100 queries we saw only 3 queries degraded slightly in performance between  5-10\%.
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=5cm]{fig/left-deep.png}}
